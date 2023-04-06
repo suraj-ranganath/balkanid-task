@@ -4,6 +4,7 @@ import logging
 import requests
 import urllib3
 import pandas as pd
+from sqlalchemy import create_engine
 
 def normalize(jsonData):
     ownerData=[]
@@ -36,9 +37,7 @@ def make_request_with_retry(url, headers, retries=5):
     )
     adapter = requests.adapters.HTTPAdapter(max_retries=retry)
     session = requests.Session()
-    session.mount("http://", adapter)
     session.mount("https://", adapter)
-
     try:
         response = session.get(url, headers=headers)
         if response.status_code == 200:
@@ -66,8 +65,18 @@ def getResponse(token):
     except ValueError as e:
         print("Invalid JSON response:", str(e))
 
+#Load data to PostgreSQL DB
+def loadToDB(df,name):
+    try:
+        engine = create_engine(f'postgresql://{creds.dbUser}:{creds.dbPassword}@{creds.dbHost}:{creds.dbPort}/{creds.dbName}')
+    except (Exception) as error :
+        print ("Error while connecting to PostgreSQL", error)
+    else:
+        df.to_sql(name, con=engine, if_exists='replace')
+        print("Data loaded to DB successfully.")
 
 if __name__ == '__main__':
+    logger = logging.getLogger(__name__)
     token = creds.githubToken
     try:
         jsonData = getResponse(token)
@@ -75,6 +84,8 @@ if __name__ == '__main__':
         print("No JSON Data recieved.")
     else:
         repoDataDf, ownerDataDf = normalize(jsonData)
-        print(ownerDataDf)
+        loadToDB(repoDataDf, 'repos')
+        loadToDB(ownerDataDf, 'owners')
+        
     
     
