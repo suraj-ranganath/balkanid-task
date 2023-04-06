@@ -2,7 +2,6 @@ import creds
 import os
 import requests
 import logging
-import requests
 import urllib3
 import psycopg2
 import pandas as pd
