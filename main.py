@@ -1,8 +1,10 @@
 import creds
+import os
 import requests
 import logging
 import requests
 import urllib3
+import psycopg2
 import pandas as pd
 from sqlalchemy import create_engine
 
@@ -73,7 +75,25 @@ def loadToDB(df,name):
         print ("Error while connecting to PostgreSQL", error)
     else:
         df.to_sql(name, con=engine, if_exists='replace')
+        engine.dispose()
         print("Data loaded to DB successfully.")
+
+def postgresToCSV(csvFileName):
+    try:
+        conn = psycopg2.connect(f"dbname={creds.dbName} user={creds.dbUser} password={creds.dbPassword} host={creds.dbHost} port={creds.dbPort}")
+        cur = conn.cursor()
+    except (Exception) as error :
+        print ("Error while connecting to PostgreSQL", error)
+    try:
+        sql = "COPY (select r.id as RepoID,r.name as RepoName,r.visibility as Status,r.stargazers_count as starsCount,o.id as ownerId,o.login as ownerName,o.gravatar_id as ownerEmail from repos r join owners o on r.owner_id = o.id) TO STDOUT WITH CSV DELIMITER ',' header"
+        with open(os.path.join(creds.csvResultPath,csvFileName), "w") as file:
+            cur.copy_expert(sql, file)
+    except (Exception) as error :
+        print ("Error Postgres SQL Query", error)
+    else:
+        conn.commit()
+        cur.close()
+        print(f"Data loaded to CSV successfully in {csvFileName}.")
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
@@ -86,6 +106,7 @@ if __name__ == '__main__':
         repoDataDf, ownerDataDf = normalize(jsonData)
         loadToDB(repoDataDf, 'repos')
         loadToDB(ownerDataDf, 'owners')
+        postgresToCSV("result.csv")
         
     
     
