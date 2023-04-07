@@ -110,9 +110,11 @@ def getResponse(token):
 
 #Load data to PostgreSQL DB
 def loadToDB(df,name):
+    import time
     try:
         engine = create_engine(f'postgresql://{creds.dbUser}:{creds.dbPassword}@{creds.dbHost}:{creds.dbPort}/{creds.dbName}')
     except (Exception) as error :
+        time.sleep(50)
         print ("Error while connecting to PostgreSQL", error)
     else:
         df.to_sql(name, con=engine, if_exists='replace')
@@ -127,7 +129,7 @@ def postgresToCSV(csvFileName):
         print ("Error while connecting to PostgreSQL", error)
     try:
         sql = "COPY (select r.id as RepoID,r.name as RepoName,r.visibility as Status,r.stargazers_count as starsCount,o.id as ownerId,o.login as ownerName,o.gravatar_id as ownerEmail from repos r join owners o on r.owner_id = o.id) TO STDOUT WITH CSV DELIMITER ',' header"
-        with open(os.path.join(creds.csvResultPath,csvFileName), "w") as file:
+        with open(csvFileName, "w") as file:
             cur.copy_expert(sql, file)
     except (Exception) as error :
         print ("Error Postgres SQL Query", error)
@@ -135,7 +137,7 @@ def postgresToCSV(csvFileName):
         conn.commit()
         cur.close()
         print(f"Data loaded to CSV successfully in {csvFileName}.")
-        return pd.read_csv(os.path.join(creds.csvResultPath,csvFileName))
+        return pd.read_csv(csvFileName)
 
 def redis_connection():
 	try:
@@ -173,7 +175,6 @@ if __name__ == '__main__':
         loadToDB(repoDataDf, 'repos')
         loadToDB(ownerDataDf, 'owners')
         resultDf = postgresToCSV("result.csv")
-
         try:
             r = redis_connection()
             storeDataframeInRedis(r, 'result', resultDf)
