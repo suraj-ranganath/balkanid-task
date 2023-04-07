@@ -5,7 +5,47 @@ import logging
 import urllib3
 import psycopg2
 import pandas as pd
+import time
 from sqlalchemy import create_engine
+
+def perform_github_device_flow_oauth(client_id):
+    device_code_url = f'https://github.com/login/device/code?client_id={client_id}&scope=repo'
+    response = requests.post(device_code_url, headers={'Accept': 'application/json'})
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to obtain device code: {response.text}")
+
+    response_json = response.json()
+    device_code = response_json.get('device_code')
+    user_code = response_json.get('user_code')
+    verification_uri = response_json.get('verification_uri')
+
+    print(f"Please visit this URL on any device and enter the following code to authorize the application:\n{verification_uri}\nCode: {user_code}")
+
+    token_url = 'https://github.com/login/oauth/access_token'
+    headers = {'Accept': 'application/json'}
+    data = {
+        'client_id': client_id,
+        'device_code': device_code,
+        'grant_type': 'urn:ietf:params:oauth:grant-type:device_code'
+    }
+
+    while True:
+        response = requests.post(token_url, headers=headers, data=data)
+        error = response.json().get('error')
+        if error == 'authorization_pending':
+            print("Authorization pending. Polling again in 5 seconds...")
+            time.sleep(5)
+        elif error == 'slow_down':
+            print("Polling too frequently. Waiting 10 seconds before polling again...")
+            time.sleep(10)
+        elif error is None:
+            access_token = response.json().get('access_token')
+            print("Access token obtained.")
+            return access_token
+        else: 
+            raise Exception(f"Failed to obtain access token: {response.text}")
+        
 
 def normalize(jsonData):
     ownerData=[]
@@ -96,7 +136,10 @@ def postgresToCSV(csvFileName):
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
-    token = creds.githubToken
+    try:
+        token = perform_github_device_flow_oauth(creds.githubClientID)
+    except Exception as e:
+        print("Error while getting token from Github API."+str(e))
     try:
         jsonData = getResponse(token)
     except:
