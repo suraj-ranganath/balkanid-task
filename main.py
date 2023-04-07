@@ -6,6 +6,8 @@ import urllib3
 import psycopg2
 import pandas as pd
 import time
+import redis
+import pickle
 from sqlalchemy import create_engine
 
 def perform_github_device_flow_oauth(client_id):
@@ -133,6 +135,28 @@ def postgresToCSV(csvFileName):
         conn.commit()
         cur.close()
         print(f"Data loaded to CSV successfully in {csvFileName}.")
+        return pd.read_csv(os.path.join(creds.csvResultPath,csvFileName))
+
+def redis_connection():
+	try:
+		pool = redis.ConnectionPool(
+		host=creds.redisHost,
+		port=creds.redisPort,
+		db=creds.redisDB
+		)
+		r = redis.Redis(connection_pool=pool)
+	except Exception as e:
+		logger.error("Redis connection is not ready yet. Error: " + str(e))
+	return r
+
+def storeDataframeInRedis(r, key, df):
+    df_serialized = pickle.dumps(df)
+    r.set(key, df_serialized)
+
+def getDataframeFromRedis(r, key):
+    df_serialized = r.get(key)
+    df = pickle.loads(df_serialized)
+    return df
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
@@ -148,7 +172,35 @@ if __name__ == '__main__':
         repoDataDf, ownerDataDf = normalize(jsonData)
         loadToDB(repoDataDf, 'repos')
         loadToDB(ownerDataDf, 'owners')
-        postgresToCSV("result.csv")
+        resultDf = postgresToCSV("result.csv")
+
+        try:
+            r = redis_connection()
+            storeDataframeInRedis(r, 'result', resultDf)
+            r.close()
+        except Exception as e:
+            print("Error while storing data in Redis."+str(e))
+        
+        print("Would you like to view the result.csv from Redis? (Y/N)")
+        choice = input()
+        while True:
+            if choice == 'Y' or choice == 'y':
+                try:
+                    r = redis_connection()
+                    resultRedisDf = getDataframeFromRedis(r, 'result')
+                    print(resultRedisDf)
+                    r.close()
+                except Exception as e:
+                    print("Error while getting data from Redis."+str(e))
+                finally:
+                    print("Thank you for using the application.")
+                    break
+            elif choice == 'N' or choice == 'n':
+                print("Thank you for using the application.")
+                break
+            else:
+                print("Please enter a valid choice.")
+                choice = input()
         
     
     

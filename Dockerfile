@@ -21,8 +21,9 @@ COPY result.csv result.csv
 # RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
 # USER appuser
 
-# Exposes port 5432 to allow traffic to reach your application
-EXPOSE 5432
+# # Exposes port 5432 to allow traffic to reach your application
+# EXPOSE 5432
 
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-CMD ["python", "main.py"]
+ENTRYPOINT ["python"]
+CMD ["main.py"]

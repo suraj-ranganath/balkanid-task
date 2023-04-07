@@ -3,3 +3,4 @@ psycopg2-binary
 requests==2.27.1
 SQLAlchemy==2.0.9
 urllib3==1.26.9
+redis
