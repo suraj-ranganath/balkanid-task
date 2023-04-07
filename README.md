@@ -54,6 +54,8 @@ docker run --name python-container -e POSTGRES_DB=balkanid -e POSTGRES_USER=post
 11. Now follow the on-screen instructions to generate an OAuth token for the github API and run the program to completion.
 
 ## Appendix A
+If you are running the project on a local machine, you will need to get the IP address of the postgres and redis containers. Follow the steps below to do so.
+
 1. Set dbHost and redisHost to 'localhost' initially.
 2. Run the postgres container as described in step 7 and the redis container as described in step 8.
 3. Run the following docker command to get the container ID of each container.
