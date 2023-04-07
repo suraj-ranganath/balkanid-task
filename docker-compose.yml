@@ -1,25 +1,8 @@
 version: '3.3'
 services:
-  balkanidsummerinternshipvitvellore2023surajranganath:
-    image: balkanidsummerinternshipvitvellore2023surajranganath
-    # environment:
-    #   POSTGRES_USER: postgres
-    #   POSTGRES_PASSWORD: root
-    #   POSTGRES_DB: balkanid
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      - db
-    # ports:
-    #   - "5432:5432"
-    volumes:
-      - "/Users/suraj/github-classroom/BalkanID-University/balkanid-summer-internship-vit-vellore-2023-suraj-ranganath/dbVol:/var/lib/postgresql/data:rw"
-
-  
-  
   db:
     image: postgres:14
+    container_name: postgres-container
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: root
@@ -30,7 +13,27 @@ services:
       - "5432:5432"
     expose:
        - "5432"
-    container_name: postgres-container
+
+  redis:
+    image: "redis:alpine"
+
+  balkanidsummerinternshipvitvellore2023surajranganath:
+    image: balkanidsummerinternshipvitvellore2023surajranganath
+    container_name: python-container
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: balkanid
+      POSTGRES_HOST: postgres-container
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+    # ports:
+    #   - "5432:5432"
+    volumes:
+      - "/Users/suraj/github-classroom/BalkanID-University/balkanid-summer-internship-vit-vellore-2023-suraj-ranganath/dbVol:/var/lib/postgresql/data:rw"
 
 
 
