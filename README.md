@@ -5,17 +5,23 @@
 2. Open the project in Visual Studio Code
 3. Ensure you have docker, redis and postgres installed
 4. Create a folder called 'dbVol' in the root of the project
-5. Create a folder called creds.py in the root of the project. It should contain the following fields.
+5. Create a file called creds.py in the root of the project. It should contain the following fields.
 
 ```python
 #Create a new OAuth app in your github account from developer settings and get the client ID
 githubClientID = "your github client id"
-dbUser = "postgres" #Default user for postgres
+
+#Default user for postgres
+dbUser = "postgres" 
 dbPassword = "root"
-dbHost = "172.17.0.2" #Get it as described in Appendix A
+
+#Get host ip as described in Appendix A
+dbHost = "172.17.0.2" 
 dbPort = "5432"
 dbName = "balkanid"
-redisHost = "172.17.0.3" #Get it as described in Appendix A
+
+#Get host ip as described in Appendix A
+redisHost = "172.17.0.3"
 redisPort = "6379"
 redisDB = "0"
 ```
