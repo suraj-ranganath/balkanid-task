@@ -1,3 +1,4 @@
+# importing required libraries
 import creds
 import sys
 import requests
@@ -10,8 +11,10 @@ import pickle
 from sqlalchemy import create_engine
 from logging_config import get_logger
 
+# Initialize logger
 logger = get_logger(__name__, '/var/lib/postgresql/data/mylog.log')
 
+# Function to perform Github OAuth Device Flow to obtain access token
 def perform_github_device_flow_oauth(client_id):
     device_code_url = f'https://github.com/login/device/code?client_id={client_id}&scope=repo'
     try:
@@ -27,10 +30,8 @@ def perform_github_device_flow_oauth(client_id):
         device_code = response_json.get('device_code')
         user_code = response_json.get('user_code')
         verification_uri = response_json.get('verification_uri')
-
     logger.info("Authentication flow started.")
     print(f"Please visit this URL on any device and enter the following code to authorize the application:\n{verification_uri}\nCode: {user_code}")
-
     token_url = 'https://github.com/login/oauth/access_token'
     headers = {'Accept': 'application/json'}
     data = {
@@ -39,6 +40,7 @@ def perform_github_device_flow_oauth(client_id):
         'grant_type': 'urn:ietf:params:oauth:grant-type:device_code'
     }
 
+    # Polling for access token
     while True:
         response = requests.post(token_url, headers=headers, data=data)
         error = response.json().get('error')
@@ -58,29 +60,8 @@ def perform_github_device_flow_oauth(client_id):
         else: 
             logger.error("Request failed with error: %s", str(e))
             raise Exception(f"Failed to obtain access token: {response.text}")
-        
 
-def normalize(jsonData):
-    ownerData=[]
-    repoData=[]
-    try:
-        for repo in jsonData:
-            ownerData+=[repo['owner']]
-            repo['owner_id']=repo['owner']['id']
-            repo.pop('owner', None)
-            repoData+=[repo]
-    except KeyError:
-        logger.error("Key not found in JSON data")
-        raise Exception("Key not found in JSON data")
-    else:
-        repoDataDf = removeDuplicates(pd.json_normalize(repoData))
-        ownerDataDf = removeDuplicates(pd.json_normalize(ownerData))
-        logger.info("Data normalized, deduplicated successfully.")
-        return repoDataDf, ownerDataDf
-
-def removeDuplicates(df):
-    return df.drop_duplicates(subset=['id'], keep='first')
-
+# Function to make requests with retry
 def make_request_with_retry(url, headers, retries=5):
     retry = urllib3.util.Retry(
         total=retries,
@@ -104,6 +85,7 @@ def make_request_with_retry(url, headers, retries=5):
         logger.error("Invalid JSON response: %s", str(e))
         raise
 
+# Function to fetch required json data from Github
 def getResponse(token):
     headers = {"Authorization": "Bearer "+token}
     url = "https://api.github.com/user/repos"
@@ -119,8 +101,32 @@ def getResponse(token):
         raise
     except ValueError as e:
         logger.error("Invalid JSON response: %s", str(e))
-        raise
+        raise       
 
+# Function to deduplicate data
+def removeDuplicates(df):
+    return df.drop_duplicates(subset=['id'], keep='first')
+
+# Function to normalize data
+def normalize(jsonData):
+    ownerData=[]
+    repoData=[]
+    try:
+        for repo in jsonData:
+            ownerData+=[repo['owner']]
+            repo['owner_id']=repo['owner']['id']
+            repo.pop('owner', None)
+            repoData+=[repo]
+    except KeyError:
+        logger.error("Key not found in JSON data")
+        raise Exception("Key not found in JSON data")
+    else:
+        repoDataDf = removeDuplicates(pd.json_normalize(repoData))
+        ownerDataDf = removeDuplicates(pd.json_normalize(ownerData))
+        logger.info("Data normalized, deduplicated successfully.")
+        return repoDataDf, ownerDataDf
+
+# Function to load data to postgres DB
 def loadToDB(df,name):
     try:
         engine = create_engine(f'postgresql://{creds.dbUser}:{creds.dbPassword}@{creds.dbHost}:{creds.dbPort}/{creds.dbName}')
@@ -134,6 +140,7 @@ def loadToDB(df,name):
         logger.info("Data loaded to postgres DB successfully.")
         print("Data loaded to DB successfully.")
 
+# Function to make the required postgres query and write the output to a csv file
 def postgresToCSV(csvFileName):
     try:
         conn = psycopg2.connect(f"dbname={creds.dbName} user={creds.dbUser} password={creds.dbPassword} host={creds.dbHost} port={creds.dbPort}")
@@ -157,6 +164,7 @@ def postgresToCSV(csvFileName):
             print(f"Data loaded to CSV successfully in {csvFileName}.")
             return pd.read_csv(csvFileName)
 
+# Function to establish connection with Redis
 def redis_connection():
     try:
         pool = redis.ConnectionPool(host=creds.redisHost, port=creds.redisPort, db=creds.redisDB)
@@ -168,7 +176,7 @@ def redis_connection():
         logger.info("Redis connection successful.")
         return r
 
-
+# Function to store data in Redis
 def storeDataframeInRedis(r, key, df):
     try:
         df_serialized = pickle.dumps(df)
@@ -179,6 +187,7 @@ def storeDataframeInRedis(r, key, df):
     else:
         logger.info("Data stored in Redis successfully.")
 
+# Function to get data from Redis
 def getDataframeFromRedis(r, key):
     try:
         df_serialized = r.get(key)
@@ -190,8 +199,10 @@ def getDataframeFromRedis(r, key):
         logger.info("Data loaded from Redis successfully.")
         return df
 
+# Driver code
 if __name__ == '__main__':
     logger.info("Starting the program.")
+    # Get Github OAuth token
     try:
         token = perform_github_device_flow_oauth(creds.githubClientID)
     except Exception as e:
@@ -220,6 +231,8 @@ if __name__ == '__main__':
                 print("Invalid choice. Please enter Y/N.")
                 logger.info("Invalid choice entered by user while trying to get Github OAuth token.")
                 choice = input()
+
+    # Get data from Github API
     try:
         jsonData = getResponse(token)
     except Exception as e:
@@ -229,6 +242,8 @@ if __name__ == '__main__':
         logger.info("Exiting the program.")
         logger.info("\n")
         sys.exit()
+    
+    # Normalize the data and store it in postgres DB
     try:
         repoDataDf, ownerDataDf = normalize(jsonData)
         loadToDB(repoDataDf, 'repos')
@@ -242,6 +257,7 @@ if __name__ == '__main__':
         sys.exit()
     logger.info("Data loaded to postgres DB successfully.")
 
+    # Cache the data in Redis
     try:
         r = redis_connection()
         storeDataframeInRedis(r, 'repos', repoDataDf)
@@ -256,7 +272,7 @@ if __name__ == '__main__':
         sys.exit()
     logger.info("Data cached in Redis successfully.")
 
-
+    # Get data from postgres DB and store it in CSV
     try:
         resultDf = postgresToCSV("/var/lib/postgresql/data/result.csv")
     except Exception as e:
@@ -267,6 +283,7 @@ if __name__ == '__main__':
         logger.info("\n")
         sys.exit()
     
+    # Cache the result data in Redis
     try:
         r = redis_connection()
         storeDataframeInRedis(r, 'result', resultDf)
@@ -279,6 +296,7 @@ if __name__ == '__main__':
         logger.info("\n")
         sys.exit()
     
+    # Get cached repos and owners data from Redis and print it if required by the user
     print("Would you like to view the cached repos.csv and owners.csv from Redis? (Y/N)")
     choice = input()
     while True:
@@ -311,6 +329,7 @@ if __name__ == '__main__':
             logger.info("Invalid choice entered by user while trying to view the cached repos.csv and owners.csv from Redis.")
             choice = input()
 
+    # Get cached result data from Redis and print it if required by the user
     print("Would you like to view the cached result.csv from Redis? (Y/N)")
     choice = input()
     while True:
