@@ -243,6 +243,21 @@ if __name__ == '__main__':
     logger.info("Data loaded to postgres DB successfully.")
 
     try:
+        r = redis_connection()
+        storeDataframeInRedis(r, 'repos', repoDataDf)
+        storeDataframeInRedis(r, 'owners', ownerDataDf)
+        r.close()
+    except Exception as e:
+        print("Error while caching data in Redis."+str(e))
+        print("Exiting the program.")
+        logger.error("Error while caching data in Redis."+str(e))
+        logger.info("Exiting the program.")
+        logger.info("\n")
+        sys.exit()
+    logger.info("Data cached in Redis successfully.")
+
+
+    try:
         resultDf = postgresToCSV("/var/lib/postgresql/data/result.csv")
     except Exception as e:
         print("Error while loading data to CSV."+str(e))
@@ -257,14 +272,46 @@ if __name__ == '__main__':
         storeDataframeInRedis(r, 'result', resultDf)
         r.close()
     except Exception as e:
-        print("Error while storing data in Redis."+str(e))
+        print("Error while caching result data in Redis."+str(e))
         print("Exiting the program.")
-        logger.error("Error while storing data in Redis."+str(e))
+        logger.error("Error while caching result data in Redis."+str(e))
         logger.info("Exiting the program.")
         logger.info("\n")
         sys.exit()
     
-    print("Would you like to view the result.csv from Redis? (Y/N)")
+    print("Would you like to view the cached repos.csv and owners.csv from Redis? (Y/N)")
+    choice = input()
+    while True:
+        if choice == 'Y' or choice == 'y':
+            logger.info("User chose to view the repos.csv and owners.csv from Redis.")
+            try:
+                r = redis_connection()
+                reposRedisDf = getDataframeFromRedis(r, 'repos')
+                ownersRedisDf = getDataframeFromRedis(r, 'owners')
+                print(reposRedisDf)
+                print(ownersRedisDf)
+                logger.info("Repos and Owners data loaded from Redis successfully.")
+                r.close()
+            except Exception as e:
+                logger.error("Error while getting data from Redis."+str(e))
+                print("Error while getting data from Redis."+str(e))               
+            finally:
+                print("Thank you for using the application.")
+                logger.info("Natural end of program.")
+                logger.info("\n")
+                break
+        elif choice == 'N' or choice == 'n':
+            print("Thank you for using the application.")
+            logger.info("User chose not to view the cached repos.csv and owners.csv from Redis.")
+            logger.info("Natural end of program.")
+            logger.info("\n")
+            break
+        else:
+            print("Invalid choice. Please enter Y/N.")
+            logger.info("Invalid choice entered by user while trying to view the cached repos.csv and owners.csv from Redis.")
+            choice = input()
+
+    print("Would you like to view the cached result.csv from Redis? (Y/N)")
     choice = input()
     while True:
         if choice == 'Y' or choice == 'y':

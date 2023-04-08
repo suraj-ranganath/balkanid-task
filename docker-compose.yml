@@ -1,4 +1,4 @@
-version: '3.3'
+version: '3.8'
 services:
   db:
     image: postgres:14
@@ -12,12 +12,12 @@ services:
     ports:
       - "5432:5432"
     expose:
-       - "5432"
+      - 5432
 
-  redis:
+  cache:
     image: "redis:alpine"
 
-  balkanidsummerinternshipvitvellore2023surajranganath:
+  app:
     image: balkanidsummerinternshipvitvellore2023surajranganath
     container_name: python-container
     environment:
@@ -30,8 +30,7 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - db
-    # ports:
-    #   - "5432:5432"
+      - cache
     volumes:
       - "/Users/suraj/github-classroom/BalkanID-University/balkanid-summer-internship-vit-vellore-2023-suraj-ranganath/dbVol:/var/lib/postgresql/data:rw"
 
