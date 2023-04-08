@@ -73,6 +73,20 @@ docker run --name python-container -e POSTGRES_DB=balkanid -e POSTGRES_USER=post
 
 11. Logs for the project can be found in logFile.log. It is stored in the dbVol folder and can be used to debug any issues.
 
+## Notes
+
+### Normalisation
+The data is stored in the postgres database in the third normal form. To achieve this, the following steps were taken.
+1. The data is stored in two tables: repos and owners. This eliminates partial and transitive dependencies. Owner_id is the primary key of the owners table and is a foreign key in the repos table.
+2. The pandas.json_normalize() function is used to flatten the json data. This eliminates multivalued attributes.
+
+The data here is put into third normal form to reduce redundancy of owners data. It also ensures data integrity by enforcing referential integrity among the tables. All required data can now be queried faster and more efficiently.
+
+### Error handling and logging
+1. The application logs all errors to logFile.log. This file is stored in the dbVol folder and can be used to debug any issues.
+2. The application retries failed requests to the github api to fetch repositories 5 times before giving up. This is done to circumvent network issues.
+3. The application also polls the github OAuth2 endpoint using device flow until the access token is recieved. Wait time between polls is decided according to the response recieved. 
+
 ## Appendix A
 If you are running the project on a local machine, you will need to get the IP address of the postgres and redis containers. Follow the steps below to do so.
 
