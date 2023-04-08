@@ -1,7 +1,6 @@
 import creds
-import os
+import sys
 import requests
-import logging
 import urllib3
 import psycopg2
 import pandas as pd
@@ -9,19 +8,27 @@ import time
 import redis
 import pickle
 from sqlalchemy import create_engine
+from logging_config import get_logger
+
+logger = get_logger(__name__, '/var/lib/postgresql/data/mylog.log')
 
 def perform_github_device_flow_oauth(client_id):
     device_code_url = f'https://github.com/login/device/code?client_id={client_id}&scope=repo'
-    response = requests.post(device_code_url, headers={'Accept': 'application/json'})
+    try:
+        response = requests.post(device_code_url, headers={'Accept': 'application/json'})
+    except requests.exceptions.RequestException as e:
+        logger.error("Request failed with error: %s", str(e))
+        raise Exception(f"Error while posting request: {e}")
+    else:
+        if response.status_code != 200:
+            logger.error("Request failed with error: %s", str(e))
+            raise Exception(f"Failed to obtain device code: {response.text}")
+        response_json = response.json()
+        device_code = response_json.get('device_code')
+        user_code = response_json.get('user_code')
+        verification_uri = response_json.get('verification_uri')
 
-    if response.status_code != 200:
-        raise Exception(f"Failed to obtain device code: {response.text}")
-
-    response_json = response.json()
-    device_code = response_json.get('device_code')
-    user_code = response_json.get('user_code')
-    verification_uri = response_json.get('verification_uri')
-
+    logger.info("Authentication flow started.")
     print(f"Please visit this URL on any device and enter the following code to authorize the application:\n{verification_uri}\nCode: {user_code}")
 
     token_url = 'https://github.com/login/oauth/access_token'
@@ -36,43 +43,45 @@ def perform_github_device_flow_oauth(client_id):
         response = requests.post(token_url, headers=headers, data=data)
         error = response.json().get('error')
         if error == 'authorization_pending':
+            logger.info("Authorization pending. Polling again in 5 seconds...")
             print("Authorization pending. Polling again in 5 seconds...")
             time.sleep(5)
         elif error == 'slow_down':
+            logger.info("Polling too frequently. Waiting 10 seconds before polling again...")
             print("Polling too frequently. Waiting 10 seconds before polling again...")
             time.sleep(10)
         elif error is None:
             access_token = response.json().get('access_token')
-            print("Access token obtained.")
+            print("Authentication flow completed. Token has been obtained from Github.")
+            logger.info("Authentication flow completed. Token has been obtained from Github.")
             return access_token
         else: 
+            logger.error("Request failed with error: %s", str(e))
             raise Exception(f"Failed to obtain access token: {response.text}")
         
 
 def normalize(jsonData):
     ownerData=[]
     repoData=[]
-    for repo in jsonData:
-        ownerData+=[repo['owner']]
-        repo['owner_id']=repo['owner']['id']
-        repo.pop('owner', None)
-        repoData+=[repo]
-    repoDataDf = removeDuplicates(pd.json_normalize(repoData))
-    ownerDataDf = removeDuplicates(pd.json_normalize(ownerData))
-    return repoDataDf, ownerDataDf
+    try:
+        for repo in jsonData:
+            ownerData+=[repo['owner']]
+            repo['owner_id']=repo['owner']['id']
+            repo.pop('owner', None)
+            repoData+=[repo]
+    except KeyError:
+        logger.error("Key not found in JSON data")
+        raise Exception("Key not found in JSON data")
+    else:
+        repoDataDf = removeDuplicates(pd.json_normalize(repoData))
+        ownerDataDf = removeDuplicates(pd.json_normalize(ownerData))
+        logger.info("Data normalized, deduplicated successfully.")
+        return repoDataDf, ownerDataDf
 
 def removeDuplicates(df):
     return df.drop_duplicates(subset=['id'], keep='first')
 
 def make_request_with_retry(url, headers, retries=5):
-    logger = logging.getLogger("retries")
-    logging.basicConfig(level=logging.DEBUG)
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
     retry = urllib3.util.Retry(
         total=retries,
         backoff_factor=1,
@@ -100,25 +109,29 @@ def getResponse(token):
     url = "https://api.github.com/user/repos"
     try:
         data = make_request_with_retry(url, headers, retries=5)
+        logger.info("Data fetched successfully from Github.")
         return data
     except requests.exceptions.HTTPError as e:
-        print("Request failed with error:", str(e))
+        logger.error("Request failed with error: %s", str(e))
+        raise
     except requests.exceptions.RequestException as e:
-        print("Request failed with error:", str(e))
+        logger.error("Request failed with error: %s", str(e))
+        raise
     except ValueError as e:
-        print("Invalid JSON response:", str(e))
+        logger.error("Invalid JSON response: %s", str(e))
+        raise
 
-#Load data to PostgreSQL DB
 def loadToDB(df,name):
-    import time
     try:
         engine = create_engine(f'postgresql://{creds.dbUser}:{creds.dbPassword}@{creds.dbHost}:{creds.dbPort}/{creds.dbName}')
     except (Exception) as error :
-        time.sleep(50)
-        print ("Error while connecting to PostgreSQL", error)
+        logger.error("Error while connecting to PostgreSQL", error)
+        raise Exception(f"Error while connecting to PostgreSQL: {error}")
     else:
+        logger.info("Connected to postgres DB successfully.")
         df.to_sql(name, con=engine, if_exists='replace')
         engine.dispose()
+        logger.info("Data loaded to postgres DB successfully.")
         print("Data loaded to DB successfully.")
 
 def postgresToCSV(csvFileName):
@@ -126,82 +139,157 @@ def postgresToCSV(csvFileName):
         conn = psycopg2.connect(f"dbname={creds.dbName} user={creds.dbUser} password={creds.dbPassword} host={creds.dbHost} port={creds.dbPort}")
         cur = conn.cursor()
     except (Exception) as error :
-        print ("Error while connecting to PostgreSQL", error)
-    try:
-        sql = "COPY (select r.id as RepoID,r.name as RepoName,r.visibility as Status,r.stargazers_count as starsCount,o.id as ownerId,o.login as ownerName,o.gravatar_id as ownerEmail from repos r join owners o on r.owner_id = o.id) TO STDOUT WITH CSV DELIMITER ',' header"
-        with open(csvFileName, "w") as file:
-            cur.copy_expert(sql, file)
-    except (Exception) as error :
-        print ("Error Postgres SQL Query", error)
+        logger.error("Error while connecting to PostgreSQL", error)
+        raise Exception(f"Error while connecting to PostgreSQL: {error}")
     else:
-        conn.commit()
-        cur.close()
-        print(f"Data loaded to CSV successfully in {csvFileName}.")
-        return pd.read_csv(csvFileName)
+        logger.info("PostgreSQL connection to query data successful.")
+        try:
+            sql = "COPY (select r.id as RepoID,r.name as RepoName,r.visibility as Status,r.stargazers_count as starsCount,o.id as ownerId,o.login as ownerName,o.gravatar_id as ownerEmail from repos r join owners o on r.owner_id = o.id) TO STDOUT WITH CSV DELIMITER ',' header"
+            with open(csvFileName, "w") as file:
+                cur.copy_expert(sql, file)
+        except (Exception) as error :
+            logger.error("Error in Postgres SQL Query", error)
+            raise Exception(f"Error in Postgres SQL Query: {error}")
+        else:
+            logger.info("Data loaded from DB to CSV successfully.")
+            conn.commit()
+            cur.close()
+            print(f"Data loaded to CSV successfully in {csvFileName}.")
+            return pd.read_csv(csvFileName)
 
 def redis_connection():
-	try:
-		pool = redis.ConnectionPool(
-		host=creds.redisHost,
-		port=creds.redisPort,
-		db=creds.redisDB
-		)
-		r = redis.Redis(connection_pool=pool)
-	except Exception as e:
-		logger.error("Redis connection is not ready yet. Error: " + str(e))
-	return r
+    try:
+        pool = redis.ConnectionPool(host=creds.redisHost, port=creds.redisPort, db=creds.redisDB)
+        r = redis.Redis(connection_pool=pool)
+    except (Exception) as e:
+        logger.error("Redis connection is not ready. Error: " + str(e))
+        raise Exception(f"Redis connection is not ready. Error: {str(e)}")
+    else:
+        logger.info("Redis connection successful.")
+        return r
+
 
 def storeDataframeInRedis(r, key, df):
-    df_serialized = pickle.dumps(df)
-    r.set(key, df_serialized)
+    try:
+        df_serialized = pickle.dumps(df)
+        r.set(key, df_serialized)
+    except Exception as e:
+        logger.error("Error while storing data in Redis. Error: " + str(e))
+        raise Exception(f"Error while storing data in Redis. Error: {str(e)}")
+    else:
+        logger.info("Data stored in Redis successfully.")
 
 def getDataframeFromRedis(r, key):
-    df_serialized = r.get(key)
-    df = pickle.loads(df_serialized)
-    return df
+    try:
+        df_serialized = r.get(key)
+        df = pickle.loads(df_serialized)
+    except Exception as e:
+        logger.error("Error while getting data from Redis. Error: " + str(e))
+        raise Exception(f"Error while getting data from Redis. Error: {str(e)}")
+    else:
+        logger.info("Data loaded from Redis successfully.")
+        return df
 
 if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
+    logger.info("Starting the program.")
     try:
         token = perform_github_device_flow_oauth(creds.githubClientID)
     except Exception as e:
         print("Error while getting token from Github API."+str(e))
-    try:
-        jsonData = getResponse(token)
-    except:
-        print("No JSON Data recieved.")
-    else:
-        repoDataDf, ownerDataDf = normalize(jsonData)
-        loadToDB(repoDataDf, 'repos')
-        loadToDB(ownerDataDf, 'owners')
-        resultDf = postgresToCSV("result.csv")
-        try:
-            r = redis_connection()
-            storeDataframeInRedis(r, 'result', resultDf)
-            r.close()
-        except Exception as e:
-            print("Error while storing data in Redis."+str(e))
-        
-        print("Would you like to view the result.csv from Redis? (Y/N)")
+        print("Would you like to try again? (Y/N)")
         choice = input()
         while True:
             if choice == 'Y' or choice == 'y':
                 try:
-                    r = redis_connection()
-                    resultRedisDf = getDataframeFromRedis(r, 'result')
-                    print(resultRedisDf)
-                    r.close()
+                    logger.info("Trying to get Github OAuth token again.")
+                    token = perform_github_device_flow_oauth(creds.githubClientID)
                 except Exception as e:
-                    print("Error while getting data from Redis."+str(e))
-                finally:
-                    print("Thank you for using the application.")
+                    print("Error while getting token from Github API."+str(e))
+                    print("Would you like to try again? (Y/N)")
+                    choice = input()
+                else:
+                    logger.info("Github OAuth token fetched successfully.")
                     break
             elif choice == 'N' or choice == 'n':
-                print("Thank you for using the application.")
-                break
+                logger.info("User chose not to get Github OAuth token.")
+                logger.info("Exiting the program.")
+                logger.info("\n")
+                print("Exiting the program.")
+                sys.exit()
             else:
-                print("Please enter a valid choice.")
+                print("Invalid choice. Please enter Y/N.")
+                logger.info("Invalid choice entered by user while trying to get Github OAuth token.")
                 choice = input()
-        
+    try:
+        jsonData = getResponse(token)
+    except Exception as e:
+        print("Error while getting data from Github API despite retrying. No JSON Data recieved.")
+        print("Exiting the program.")
+        logger.error("Error while getting data from Github API despite retrying. No JSON Data recieved. Error: "+str(e))
+        logger.info("Exiting the program.")
+        logger.info("\n")
+        sys.exit()
+    try:
+        repoDataDf, ownerDataDf = normalize(jsonData)
+        loadToDB(repoDataDf, 'repos')
+        loadToDB(ownerDataDf, 'owners')
+    except Exception as e:
+        print("Error while loading data to postgres DB."+str(e))
+        print("Exiting the program.")
+        logger.error("Error while loading data to postgres DB."+str(e))
+        logger.info("Exiting the program.")
+        logger.info("\n")
+        sys.exit()
+    logger.info("Data loaded to postgres DB successfully.")
+
+    try:
+        resultDf = postgresToCSV("/var/lib/postgresql/data/result.csv")
+    except Exception as e:
+        print("Error while loading data to CSV."+str(e))
+        print("Exiting the program.")
+        logger.error("Error while loading data to CSV."+str(e))
+        logger.info("Exiting the program.")
+        logger.info("\n")
+        sys.exit()
     
+    try:
+        r = redis_connection()
+        storeDataframeInRedis(r, 'result', resultDf)
+        r.close()
+    except Exception as e:
+        print("Error while storing data in Redis."+str(e))
+        print("Exiting the program.")
+        logger.error("Error while storing data in Redis."+str(e))
+        logger.info("Exiting the program.")
+        logger.info("\n")
+        sys.exit()
     
+    print("Would you like to view the result.csv from Redis? (Y/N)")
+    choice = input()
+    while True:
+        if choice == 'Y' or choice == 'y':
+            logger.info("User chose to view the result.csv from Redis.")
+            try:
+                r = redis_connection()
+                resultRedisDf = getDataframeFromRedis(r, 'result')
+                print(resultRedisDf)
+                logger.info("Result data loaded from Redis successfully.")
+                r.close()
+            except Exception as e:
+                logger.error("Error while getting data from Redis."+str(e))
+                print("Error while getting data from Redis."+str(e))               
+            finally:
+                print("Thank you for using the application.")
+                logger.info("Natural end of program.")
+                logger.info("\n")
+                break
+        elif choice == 'N' or choice == 'n':
+            print("Thank you for using the application.")
+            logger.info("User chose not to view the result.csv from Redis.")
+            logger.info("Natural end of program.")
+            logger.info("\n")
+            break
+        else:
+            print("Please enter a valid choice.")
+            logger.info("Invalid choice entered by user while trying to view the result.csv from Redis.")
+            choice = input()

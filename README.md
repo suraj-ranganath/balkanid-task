@@ -6,14 +6,12 @@ This is an application that uses the Github API to fetch the repositories of a u
 
 ## Features
 1. Github OAuth2 authentication
-2. Fetching user repositories in json format
-3. Normalising and deduplicating data
-4. Storage in postgres database
-5. Saving queried data as csv file
-6. Uploading and retrieving data from a Redis database
-7. Dockerization
-8. Error handling and logging of errors
-9. Retrying failed github requests
+2. Github API
+3. PostgreSQL database
+4. Redis memory store
+5. Dockerization
+6. Error handling and logging
+7. Retrying failed requests
 
 ## Requirements
 1. Python 3.9
@@ -38,7 +36,7 @@ dbPassword = "root"
 #Get host ip as described in Appendix A
 dbHost = "172.17.0.2" 
 dbPort = "5432"
-dbName = "balkanid"
+dbName = "database name"
 
 #Get host ip as described in Appendix A
 redisHost = "172.17.0.3"
@@ -68,10 +66,12 @@ docker build -t python-postgres-app .
 9. Run the following docker command to create and run the python container. This will create a container called python-container.
 
 ```
-docker run --name python-container -e POSTGRES_DB=balkanid -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=root -e POSTGRES_HOST=postgres-container -it python-postgres-app
+docker run --name python-container -e POSTGRES_DB=balkanid -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=root -e POSTGRES_HOST=postgres-container -v "path-to-dbVol:/var/lib/postgresql/data:rw" -it python-postgres-app
 ```
 
 10. Now follow the on-screen instructions to generate an OAuth token for the github API and run the program to completion.
+
+11. Logs for the project can be found in logFile.log. It is stored in the dbVol folder and can be used to debug any issues.
 
 ## Appendix A
 If you are running the project on a local machine, you will need to get the IP address of the postgres and redis containers. Follow the steps below to do so.
