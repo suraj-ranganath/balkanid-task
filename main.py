@@ -200,7 +200,7 @@ def getDataframeFromRedis(r, key):
         return df
 
 # Driver code
-if __name__ == '__main__':
+def main():
     logger.info("Starting the program.")
     # Get Github OAuth token
     try:

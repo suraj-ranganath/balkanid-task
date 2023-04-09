@@ -15,6 +15,7 @@ WORKDIR /app
 # COPY . /app
 COPY creds.py creds.py
 COPY main.py main.py
+COPY server.py server.py
 COPY result.csv result.csv
 COPY logging_config.py logging_config.py
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
@@ -22,9 +23,9 @@ COPY logging_config.py logging_config.py
 # RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
 # USER appuser
 
-# # Exposes port 5432 to allow traffic to reach your application
-# EXPOSE 5432
+EXPOSE 8080/udp
+EXPOSE 8080/tcp
 
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
 ENTRYPOINT ["python"]
-CMD ["main.py"]
+CMD ["server.py"]
