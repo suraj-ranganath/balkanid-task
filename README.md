@@ -1,8 +1,6 @@
-[![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-c66648af7eb3fe8bc4f294546bfd86ef473780cde1dea487d3c4ff354943c9ae.svg)](https://classroom.github.com/online_ide?assignment_repo_id=10771702&assignment_repo_type=AssignmentRepo)
-
 # Balkan Internship Selection Task
 
-This is an application that uses the Github API to fetch the repositories of a user in the json format. The user is authenticated using OAuth2. This data is then normalised, checked for duplicates and stored in a postgres database as 2 tables: repos and owners. The table is queried as required and the table is stored as a csv file. This csv file is then uploaded to a redis database. The redis database is queried if required and the data is displayed on the terminal. Additionally, the application is dockerized and can be run on any machine by following the steps below.
+This is an application that uses the Github API to fetch the repositories of a user in the json format when the user ends a request from port 8080. The user is authenticated using OAuth2. This data is then normalised, checked for duplicates and stored in a postgres database as 2 tables: repos and owners. The table is queried as required and the table is stored as a csv file. This csv file is then uploaded to a redis database. The redis database is queried if required and the data is displayed on the terminal. Additionally, the application is dockerized and can be run on any machine by following the steps below.
 
 ## Features
 1. Github OAuth2 authentication
@@ -12,6 +10,7 @@ This is an application that uses the Github API to fetch the repositories of a u
 5. Dockerization
 6. Error handling and logging
 7. Retrying failed requests
+8. Endpoint for user to run the program
 
 ## Requirements
 1. Python 3.9
@@ -20,6 +19,8 @@ This is an application that uses the Github API to fetch the repositories of a u
 4. Postgres
 
 ## How to run the project
+You can obtain the image for the project by directly skipping to step 8. If there are IP address and port issues, you will want to build the image yourself. To do so, follow the steps below.
+
 1. Clone the project
 2. Open the project in Visual Studio Code
 3. Create a folder called 'dbVol' in the root of the project
@@ -56,22 +57,32 @@ docker run --name postgres-container -e POSTGRES_PASSWORD=root -e POSTGRES_USER=
 ```
 docker run --name redis-container -d redis
 ```
+8. Run the following command to pull the image for the python project from dockerhub. If this runs successfully,there is no need to build the image in step 9. Else, follow the steps below.
 
-8. Run the following docker command to build an image for the python project. 
+```
+docker pull surajranganath/balkanid:latest
+```
+
+9. Run the following docker command to build an image for the python project. 
 
 ```
 docker build -t python-postgres-app .
 ```
 
-9. Run the following docker command to create and run the python container. This will create a container called python-container.
+10. Run the following docker command to create and run the python container. This will create a container called python-container.
 
 ```
-docker run --name python-container -e POSTGRES_DB=balkanid -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=root -e POSTGRES_HOST=postgres-container -v "path-to-dbVol:/var/lib/postgresql/data:rw" -it python-postgres-app
+docker run --name python-container -e POSTGRES_DB=balkanid -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=root -e POSTGRES_HOST=postgres-container -v "path-to-dbVol:/var/lib/postgresql/data:rw" -p 8080:8080 -it python-postgres-app
 ```
 
-10. Now follow the on-screen instructions to generate an OAuth token for the github API and run the program to completion.
+11. Open a browser and go to http://localhost:8080 or use the curl command below in your terminal. This will run the program.
 
-11. Logs for the project can be found in logFile.log. It is stored in the dbVol folder and can be used to debug any issues.
+```
+curl http://localhost:8080
+```
+
+12. Now follow the on-screen instructions to generate an OAuth token for the github API and run the program to completion.
+13. Logs for the project can be found in logFile.log. The logs for the server can by found in server.log as well. It is stored in the dbVol folder and can be used to debug any issues.
 
 ## Notes
 
@@ -105,3 +116,7 @@ docker inspect <container ID> | grep "IPAddress"
 ```
 
 5. Set dbHost and redisHost to the IP address of the respective containers.
+
+## Appendix B
+For dev purposes, to open in VS Code:
+[![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-c66648af7eb3fe8bc4f294546bfd86ef473780cde1dea487d3c4ff354943c9ae.svg)](https://classroom.github.com/online_ide?assignment_repo_id=10771702&assignment_repo_type=AssignmentRepo)
