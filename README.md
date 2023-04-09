@@ -57,7 +57,7 @@ docker run --name postgres-container -e POSTGRES_PASSWORD=root -e POSTGRES_USER=
 ```
 docker run --name redis-container -d redis
 ```
-8. Run the following command to pull the image for the python project from dockerhub. If this runs successfully,there is no need to build the image in step 9. Else, follow the steps below.
+8. Run the following command to pull the image for the python project from dockerhub. If this runs successfully, there is no need to build the image in step 9. Else, follow the steps below.
 
 ```
 docker pull surajranganath/balkanid:latest
