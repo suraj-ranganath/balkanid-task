@@ -6,7 +6,7 @@ import logging_config
 PORT = 8080
 MODULE_NAME = "main"
 
-logger = logging_config.get_logger(__name__, "server.log")
+logger = logging_config.get_logger(__name__, "/var/lib/postgresql/data/server.log")
 
 class RequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):

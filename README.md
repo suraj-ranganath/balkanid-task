@@ -81,7 +81,7 @@ docker run --name python-container -e POSTGRES_DB=balkanid -e POSTGRES_USER=post
 curl http://localhost:8080
 ```
 
-12. Now follow the on-screen instructions to generate an OAuth token for the github API and run the program to completion.
+12. Now follow the on-screen instructions to generate an OAuth token for the github API and run the program to completion. Result.csv will be stored in the dbVol folder.
 13. Logs for the project can be found in logFile.log. The logs for the server can by found in server.log as well. It is stored in the dbVol folder and can be used to debug any issues.
 
 ## Notes
