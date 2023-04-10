@@ -1,3 +1,4 @@
+[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-24ddc0f5d75046c5622901739e7c5dd533143b0c8e959d652212380cedb1ea36.svg)](https://classroom.github.com/a/e3nG7TEg)
 # Balkan Internship Selection Task
 
 This is an application that uses the Github API to fetch the repositories of a user in the json format when the user ends a request from port 8080. The user is authenticated using OAuth2. This data is then normalised, checked for duplicates and stored in a postgres database as 2 tables: repos and owners. The table is queried as required and the table is stored as a csv file. The repos, owners and result csv are all cached on Redis and displayed to the user if required. Additionally, the application is dockerized and can be run on any machine by following the steps below.
