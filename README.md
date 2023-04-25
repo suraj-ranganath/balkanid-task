@@ -1,4 +1,4 @@
-# Balkan Internship Selection Task
+# BalkanID Task
 
 This is an application that uses the Github API to fetch the repositories of a user in the json format when the user ends a request from port 8080. The user is authenticated using OAuth2. This data is then normalised, checked for duplicates and stored in a postgres database as 2 tables: repos and owners. The table is queried as required and the table is stored as a csv file. The repos, owners and result csv are all cached on Redis and displayed to the user if required. Additionally, the application is dockerized and can be run on any machine by following the steps below.
 
